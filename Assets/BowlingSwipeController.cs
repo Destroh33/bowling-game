@@ -45,8 +45,6 @@ public class BowlingSwipe_ScreenAndWorldViz : MonoBehaviour
 
     [Header("Facing")]
     [SerializeField] Transform faceTarget;
-    [SerializeField] bool rotateRigidbody = true;
-    [SerializeField] bool lockPitchAndRoll = true;
 
     [Header("Spin from second-half curve")]
     [SerializeField] float maxSpinAroundVelocityRad = 30f;
@@ -176,8 +174,11 @@ public class BowlingSwipe_ScreenAndWorldViz : MonoBehaviour
 
     void Update()
     {
+        if (!rb) return;
         Debug.Log(rb.angularVelocity);
+
         if (!dragging || recordComplete || positionAction == null) return;
+
         float now = Time.unscaledTime;
         if (now - swipeStartTime >= maxRecordSeconds)
         {
@@ -240,20 +241,19 @@ public class BowlingSwipe_ScreenAndWorldViz : MonoBehaviour
 
         float spin = signedCurve * maxSpinAroundVelocityRad;
 
-        Quaternion look = Quaternion.LookRotation(worldDir, Vector3.up);
-        if (lockPitchAndRoll) look = Quaternion.Euler(0f, look.eulerAngles.y, 0f);
+        Vector3 spinAxis = faceTarget ? faceTarget.forward : transform.forward;
+        spinAxis.y = 0f;
+        if (spinAxis.sqrMagnitude < 1e-6f) spinAxis = transform.forward;
+        spinAxis.Normalize();
 
         rb.linearVelocity = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
 
-        if (rotateRigidbody) rb.MoveRotation(look);
-        else if (faceTarget) faceTarget.rotation = look;
-
         rb.linearVelocity = worldDir * speed;
-        rb.angularVelocity = worldDir * spin;
+        rb.angularVelocity = spinAxis * spin;
 
         if (debugLogs)
-            Debug.Log($"[SwipeViz] Launch dir={worldDir} speed={speed:0.00} curve={curve01:0.000} spin={spin:0.00}");
+            Debug.Log($"[SwipeViz] Launch velDir={worldDir} speed={speed:0.00} curve={curve01:0.000} spinAxis={spinAxis} spin={spin:0.00}");
     }
 
     void RecomputeViz()
@@ -451,9 +451,10 @@ public class BowlingSwipe_ScreenAndWorldViz : MonoBehaviour
         a = mean + v * minT;
         b = mean + v * maxT;
     }
-    private void OnDrawGizmos()
+
+    void OnDrawGizmos()
     {
-        Debug.DrawRay(transform.position,transform.forward, Color.red);
+        Debug.DrawRay(transform.position, transform.forward, Color.red);
     }
 
 #if UNITY_EDITOR
