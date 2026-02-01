@@ -9,80 +9,89 @@ using UnityEditor;
 [DisallowMultipleComponent]
 public class BowlingSwipe_ScreenAndWorldViz : MonoBehaviour
 {
-    [Header("Input (InputActionAsset)")]
-    [SerializeField] private InputActionAsset actions;
-    [SerializeField] private string actionMapName = "Player";
-    [SerializeField] private string pressActionName = "Press";
-    [SerializeField] private string positionActionName = "Position";
-    [SerializeField] private bool enableActionMapOnEnable = true;
+    [Header("Input")]
+    [SerializeField] InputActionAsset actions;
+    [SerializeField] string actionMapName = "Player";
+    [SerializeField] string pressActionName = "Press";
+    [SerializeField] string positionActionName = "Position";
+    [SerializeField] bool enableActionMapOnEnable = true;
 
-    [Header("References")]
-    [SerializeField] private Rigidbody rb;
-    [SerializeField] private Camera cam;
+    [Header("Refs")]
+    [SerializeField] Rigidbody rb;
+    [SerializeField] Camera cam;
 
-    [Header("Lane (kept)")]
-    [SerializeField] private LayerMask laneMask;
+    [Header("Lane")]
+    [SerializeField] LayerMask laneMask;
+    [SerializeField] float laneY = 0f;
 
-    [Header("Gesture sampling")]
-    [Tooltip("How long we record samples after press starts. After this, we stop sampling until release.")]
-    [SerializeField] private float maxRecordSeconds = 0.35f;
+    [Header("Sampling")]
+    [SerializeField] float maxRecordSeconds = 0.35f;
+    [SerializeField] int maxSamples = 128;
 
-    [Tooltip("Clamp sample count so the polyline stays manageable.")]
-    [SerializeField] private int maxSamples = 128;
+    [Header("Mapping")]
+    [SerializeField] float pixelsToWorld = 0.0025f;
+    [SerializeField] bool invertForward = false;
 
-    [Header("World mapping: 'faceplant' rotation")]
-    [Tooltip("Pixels -> world units scaling for the rotated world path.")]
-    [SerializeField] private float pixelsToWorld = 0.0025f;
+    [Header("Viz")]
+    [SerializeField] bool drawWorldPath = true;
+    [SerializeField] LineRenderer worldPathLine;
+    [SerializeField] LineRenderer worldFitLine;
+    [SerializeField] float worldLineUpOffset = 0.02f;
 
-    [Tooltip("If swipe feels backwards (up swipe goes behind), enable this.")]
-    [SerializeField] private bool invertForward = false;
+    [Header("Launch")]
+    [SerializeField] float speedScale = 0.02f;
+    [SerializeField] float minSpeed = 4f;
+    [SerializeField] float maxSpeed = 14f;
 
-    [Tooltip("World path y value (lane is flat).")]
-    [SerializeField] private float laneY = 0f;
+    [Header("Facing")]
+    [SerializeField] Transform faceTarget;
+    [SerializeField] bool rotateRigidbody = true;
+    [SerializeField] bool lockPitchAndRoll = true;
 
-    [Header("World Path Debug")]
-    [SerializeField] private bool drawWorldPath = true;
-    [SerializeField] private LineRenderer worldPathLine;
-    [SerializeField] private float worldPathUpOffset = 0.02f;
+    [Header("Spin from second-half curve")]
+    [SerializeField] float maxSpinAroundVelocityRad = 30f;
+    [SerializeField] float curveNormalizeFrac = 0.25f;
+    [SerializeField] float curveMinDenomPx = 40f;
+    [SerializeField] float curveDeadzone = 0.06f;
+    [SerializeField] bool useSignedCurve = true;
 
     [Header("Logs")]
-    [SerializeField] private bool debugLogs = true;
+    [SerializeField] bool debugLogs = true;
 
-    // Input
-    private InputActionMap map;
-    private InputAction pressAction;
-    private InputAction positionAction;
+    InputActionMap map;
+    InputAction pressAction;
+    InputAction positionAction;
 
-    private struct Sample
-    {
-        public Vector2 screen;  // Input System screen coords (0,0 bottom-left)
-        public float t;
-        public Sample(Vector2 s, float time) { screen = s; t = time; }
-    }
+    struct Sample { public Vector2 p; public float t; public Sample(Vector2 p, float t) { this.p = p; this.t = t; } }
 
-    private readonly List<Sample> samples = new List<Sample>(256);
-    private readonly List<Vector3> worldPath = new List<Vector3>(256);
+    readonly List<Sample> samples = new(256);
+    readonly List<Vector3> worldPath = new(256);
 
-    // Swipe state
-    private bool dragging;
-    private float swipeStartTime;
-    private bool recordComplete;
+    bool dragging;
+    float swipeStartTime;
+    bool recordComplete;
 
-    private void Reset()
+    Vector2 fitOrigin;
+    Vector2 fitDir;
+    Vector2 fitA, fitB;
+
+    void Reset()
     {
         rb = GetComponent<Rigidbody>();
         cam = Camera.main;
     }
 
-    private void Awake()
+    void Awake()
     {
         if (!rb) rb = GetComponent<Rigidbody>();
         if (!cam) cam = Camera.main;
         ResolveActions();
-        EnsureWorldLine();
+        EnsureLines();
+        if (!faceTarget) faceTarget = rb ? rb.transform : transform;
+        rb.maxAngularVelocity = 50000f;
     }
 
-    private void OnEnable()
+    void OnEnable()
     {
         ResolveActions();
 
@@ -99,7 +108,7 @@ public class BowlingSwipe_ScreenAndWorldViz : MonoBehaviour
             Debug.Log($"[SwipeViz] Enabled. Map='{actionMapName}', Press='{pressActionName}', Position='{positionActionName}'.");
     }
 
-    private void OnDisable()
+    void OnDisable()
     {
         if (pressAction != null)
         {
@@ -112,20 +121,20 @@ public class BowlingSwipe_ScreenAndWorldViz : MonoBehaviour
         positionAction?.Disable();
     }
 
-    private void ResolveActions()
+    void ResolveActions()
     {
         map = null; pressAction = null; positionAction = null;
 
-        if (actions == null)
+        if (!actions)
         {
-            Debug.LogError("[SwipeViz] InputActionAsset is null. Assign it.");
+            Debug.LogError("[SwipeViz] InputActionAsset is null.");
             return;
         }
 
         map = actions.FindActionMap(actionMapName, false);
         if (map == null)
         {
-            Debug.LogError($"[SwipeViz] ActionMap '{actionMapName}' not found in asset '{actions.name}'.");
+            Debug.LogError($"[SwipeViz] ActionMap '{actionMapName}' not found in '{actions.name}'.");
             return;
         }
 
@@ -136,33 +145,44 @@ public class BowlingSwipe_ScreenAndWorldViz : MonoBehaviour
         if (positionAction == null) Debug.LogError($"[SwipeViz] Position action '{positionActionName}' not found in map '{actionMapName}'.");
     }
 
-    private void EnsureWorldLine()
+    void EnsureLines()
     {
-        if (worldPathLine != null) return;
+        if (!worldPathLine)
+        {
+            var go = new GameObject("WorldSwipeCurve");
+            go.transform.SetParent(transform, false);
+            worldPathLine = go.AddComponent<LineRenderer>();
+            InitLine(worldPathLine, 0.03f);
+        }
 
-        var go = new GameObject("WorldRotatedSwipeLine");
-        go.transform.SetParent(transform, false);
-
-        worldPathLine = go.AddComponent<LineRenderer>();
-        worldPathLine.useWorldSpace = true;
-        worldPathLine.positionCount = 0;
-        worldPathLine.widthMultiplier = 0.03f;
-        worldPathLine.numCornerVertices = 4;
-        worldPathLine.numCapVertices = 4;
-        worldPathLine.material = new Material(Shader.Find("Sprites/Default"));
+        if (!worldFitLine)
+        {
+            var go = new GameObject("WorldSwipeFit");
+            go.transform.SetParent(transform, false);
+            worldFitLine = go.AddComponent<LineRenderer>();
+            InitLine(worldFitLine, 0.05f);
+        }
     }
 
-    private void Update()
+    void InitLine(LineRenderer lr, float width)
     {
+        lr.useWorldSpace = true;
+        lr.positionCount = 0;
+        lr.widthMultiplier = width;
+        lr.numCornerVertices = 4;
+        lr.numCapVertices = 4;
+        lr.material = new Material(Shader.Find("Sprites/Default"));
+    }
+
+    void Update()
+    {
+        Debug.Log(rb.angularVelocity);
         if (!dragging || recordComplete || positionAction == null) return;
-
         float now = Time.unscaledTime;
-
-        // stop sampling after maxRecordSeconds
         if (now - swipeStartTime >= maxRecordSeconds)
         {
             recordComplete = true;
-            if (debugLogs) Debug.Log($"[SwipeViz] Record complete (>{maxRecordSeconds:0.###}s), samples={samples.Count}");
+            if (debugLogs) Debug.Log($"[SwipeViz] Record complete, samples={samples.Count}");
             return;
         }
 
@@ -172,15 +192,10 @@ public class BowlingSwipe_ScreenAndWorldViz : MonoBehaviour
         if (samples.Count > maxSamples)
             samples.RemoveRange(0, samples.Count - maxSamples);
 
-        // Update world path in real-time while dragging
-        if (drawWorldPath)
-        {
-            if (BuildWorldPathFromSamples_Faceplant(samples, worldPath))
-                UpdateWorldLine(worldPath);
-        }
+        RecomputeViz();
     }
 
-    private void OnPressStarted(InputAction.CallbackContext ctx)
+    void OnPressStarted(InputAction.CallbackContext ctx)
     {
         if (positionAction == null) return;
 
@@ -191,59 +206,112 @@ public class BowlingSwipe_ScreenAndWorldViz : MonoBehaviour
         worldPath.Clear();
 
         swipeStartTime = Time.unscaledTime;
-
         Vector2 start = positionAction.ReadValue<Vector2>();
         samples.Add(new Sample(start, swipeStartTime));
 
-        if (debugLogs) Debug.Log($"[SwipeViz] START {start}");
+        RecomputeViz();
 
-        if (drawWorldPath)
-        {
-            if (BuildWorldPathFromSamples_Faceplant(samples, worldPath))
-                UpdateWorldLine(worldPath);
-            else
-                worldPathLine.positionCount = 0;
-        }
+        if (debugLogs) Debug.Log($"[SwipeViz] START {start}");
     }
 
-    private void OnPressCanceled(InputAction.CallbackContext ctx)
+    void OnPressCanceled(InputAction.CallbackContext ctx)
     {
         if (!dragging) return;
         dragging = false;
 
         if (debugLogs)
-        {
-            Vector2 end = positionAction != null ? positionAction.ReadValue<Vector2>() : Vector2.zero;
-            Debug.Log($"[SwipeViz] END {end} samples={samples.Count}");
-        }
+            Debug.Log($"[SwipeViz] END samples={samples.Count}");
 
-        // Keep the last stroke visible after release.
-        // If you want to clear immediately on release, uncomment:
-        // samples.Clear();
-        // worldPath.Clear();
-        // if (worldPathLine) worldPathLine.positionCount = 0;
+        if (samples.Count < 2 || !rb) return;
+
+        RecomputeViz();
+
+        Vector3 worldDir = ScreenDirToWorld(fitDir);
+        worldDir.y = 0f;
+        if (worldDir.sqrMagnitude < 1e-6f) return;
+        worldDir.Normalize();
+
+        float swipeLenPx = (fitB - fitA).magnitude;
+        float speed = Mathf.Clamp(swipeLenPx * pixelsToWorld / Mathf.Max(0.001f, maxRecordSeconds) * speedScale, minSpeed, maxSpeed);
+
+        float curve01 = ComputeSecondHalfCurve01(samples, fitOrigin, fitDir, swipeLenPx, curveNormalizeFrac, curveMinDenomPx);
+        float signedCurve = useSignedCurve ? curve01 : Mathf.Abs(curve01);
+        if (Mathf.Abs(signedCurve) < curveDeadzone) signedCurve = 0f;
+
+        float spin = signedCurve * maxSpinAroundVelocityRad;
+
+        Quaternion look = Quaternion.LookRotation(worldDir, Vector3.up);
+        if (lockPitchAndRoll) look = Quaternion.Euler(0f, look.eulerAngles.y, 0f);
+
+        rb.linearVelocity = Vector3.zero;
+        rb.angularVelocity = Vector3.zero;
+
+        if (rotateRigidbody) rb.MoveRotation(look);
+        else if (faceTarget) faceTarget.rotation = look;
+
+        rb.linearVelocity = worldDir * speed;
+        rb.angularVelocity = worldDir * spin;
+
+        if (debugLogs)
+            Debug.Log($"[SwipeViz] Launch dir={worldDir} speed={speed:0.00} curve={curve01:0.000} spin={spin:0.00}");
     }
 
-    // ---- World mapping: rotate screen curve about camera.right so it "faceplants" onto the ground plane ----
-    // Screen X stays camera-right. Screen Y becomes camera-forward. Then we anchor to ball and force y=laneY.
-    private bool BuildWorldPathFromSamples_Faceplant(List<Sample> s, List<Vector3> outPath)
+    void RecomputeViz()
+    {
+        ComputeFitFromFirstHalf(samples, out fitOrigin, out fitDir, out fitA, out fitB);
+
+        if (!drawWorldPath) return;
+
+        if (BuildWorldPathFromSamples(samples, worldPath))
+            UpdateLine(worldPathLine, worldPath);
+        else
+            worldPathLine.positionCount = 0;
+
+        if (BuildWorldLineFromFit(fitA, fitB, out var a, out var b))
+            UpdateLine2(worldFitLine, a, b);
+        else
+            worldFitLine.positionCount = 0;
+    }
+
+    static float ComputeSecondHalfCurve01(List<Sample> s, Vector2 origin, Vector2 dir, float swipeLenPx, float normFrac, float minDenomPx)
+    {
+        if (s == null || s.Count < 6) return 0f;
+
+        int start = s.Count / 2;
+        int n = s.Count - start;
+        if (n < 2) return 0f;
+
+        Vector2 perp = new(-dir.y, dir.x);
+
+        float sum = 0f;
+        for (int i = start; i < s.Count; i++)
+        {
+            Vector2 p = s[i].p;
+            float t = Vector2.Dot(p - origin, dir);
+            Vector2 proj = origin + dir * t;
+            float lateral = Vector2.Dot(p - proj, perp);
+            sum += lateral;
+        }
+
+        float avg = sum / n;
+        float denom = Mathf.Max(minDenomPx, Mathf.Max(1f, swipeLenPx) * Mathf.Max(0.01f, normFrac));
+        return Mathf.Clamp(avg / denom, -1f, 1f);
+    }
+
+    bool BuildWorldPathFromSamples(List<Sample> s, List<Vector3> outPath)
     {
         outPath.Clear();
         if (s == null || s.Count < 2) return false;
-
         if (!cam) cam = Camera.main;
         if (!cam) return false;
 
-        Vector2 p0 = s[0].screen;
+        Vector2 p0 = s[0].p;
 
-        // Use camera axes, but flatten onto the ground so camera pitch doesn't affect mapping
-        Vector3 right = cam.transform.right;
-        right.y = 0f;
+        Vector3 right = cam.transform.right; right.y = 0f;
         if (right.sqrMagnitude < 1e-6f) right = Vector3.right;
         right.Normalize();
 
-        Vector3 forward = cam.transform.forward;
-        forward.y = 0f;
+        Vector3 forward = cam.transform.forward; forward.y = 0f;
         if (forward.sqrMagnitude < 1e-6f) forward = Vector3.forward;
         forward.Normalize();
 
@@ -254,10 +322,9 @@ public class BowlingSwipe_ScreenAndWorldViz : MonoBehaviour
 
         for (int i = 0; i < s.Count; i++)
         {
-            Vector2 d = s[i].screen - p0; // pixels relative to start
+            Vector2 d = s[i].p - p0;
             float dx = d.x * pixelsToWorld;
             float dz = d.y * pixelsToWorld * sign;
-
             Vector3 w = ballPos + right * dx + forward * dz;
             w.y = laneY;
             outPath.Add(w);
@@ -267,23 +334,69 @@ public class BowlingSwipe_ScreenAndWorldViz : MonoBehaviour
         return outPath.Count >= 2;
     }
 
-    private void UpdateWorldLine(List<Vector3> path)
+    bool BuildWorldLineFromFit(Vector2 fitScreenA, Vector2 fitScreenB, out Vector3 a, out Vector3 b)
     {
-        if (!worldPathLine) return;
+        a = b = Vector3.zero;
+        if (!rb) return false;
 
-        worldPathLine.positionCount = path.Count;
-        for (int i = 0; i < path.Count; i++)
-            worldPathLine.SetPosition(i, path[i] + Vector3.up * worldPathUpOffset);
+        Vector2 p0 = samples.Count > 0 ? samples[0].p : fitScreenA;
+        Vector3 basePos = rb.position; basePos.y = laneY;
+
+        a = basePos + ScreenDeltaToWorld(fitScreenA - p0);
+        b = basePos + ScreenDeltaToWorld(fitScreenB - p0);
+        a.y = b.y = laneY;
+        return true;
     }
 
-    private static void RemoveNearDuplicates(List<Vector3> pts, float minDist)
+    Vector3 ScreenDeltaToWorld(Vector2 d)
+    {
+        if (!cam) cam = Camera.main;
+        if (!cam) return Vector3.zero;
+
+        Vector3 right = cam.transform.right; right.y = 0f;
+        if (right.sqrMagnitude < 1e-6f) right = Vector3.right;
+        right.Normalize();
+
+        Vector3 forward = cam.transform.forward; forward.y = 0f;
+        if (forward.sqrMagnitude < 1e-6f) forward = Vector3.forward;
+        forward.Normalize();
+
+        float sign = invertForward ? -1f : 1f;
+
+        float dx = d.x * pixelsToWorld;
+        float dz = d.y * pixelsToWorld * sign;
+        return right * dx + forward * dz;
+    }
+
+    Vector3 ScreenDirToWorld(Vector2 dir)
+    {
+        if (dir.sqrMagnitude < 1e-6f) return Vector3.zero;
+        return ScreenDeltaToWorld(dir.normalized);
+    }
+
+    void UpdateLine(LineRenderer lr, List<Vector3> path)
+    {
+        if (!lr) return;
+        lr.positionCount = path.Count;
+        for (int i = 0; i < path.Count; i++)
+            lr.SetPosition(i, path[i] + Vector3.up * worldLineUpOffset);
+    }
+
+    void UpdateLine2(LineRenderer lr, Vector3 a, Vector3 b)
+    {
+        if (!lr) return;
+        lr.positionCount = 2;
+        lr.SetPosition(0, a + Vector3.up * worldLineUpOffset);
+        lr.SetPosition(1, b + Vector3.up * worldLineUpOffset);
+    }
+
+    static void RemoveNearDuplicates(List<Vector3> pts, float minDist)
     {
         if (pts.Count < 2) return;
-
         float minSqr = minDist * minDist;
         int write = 1;
-
         Vector3 last = pts[0];
+
         for (int i = 1; i < pts.Count; i++)
         {
             if ((pts[i] - last).sqrMagnitude >= minSqr)
@@ -297,16 +410,56 @@ public class BowlingSwipe_ScreenAndWorldViz : MonoBehaviour
             pts.RemoveRange(write, pts.Count - write);
     }
 
-#if UNITY_EDITOR
-    // InputSystem screen coords: (0,0) bottom-left
-    // OnGUI/Handles GUI coords: (0,0) top-left
-    private static Vector2 ToGUI(Vector2 inputSystemScreenPos)
+    static void ComputeFitFromFirstHalf(List<Sample> s, out Vector2 origin, out Vector2 dir, out Vector2 a, out Vector2 b)
     {
-        return new Vector2(inputSystemScreenPos.x, Screen.height - inputSystemScreenPos.y);
+        origin = Vector2.zero;
+        dir = Vector2.up;
+        a = b = Vector2.zero;
+
+        if (s == null || s.Count < 2) return;
+
+        int n = Mathf.Max(2, s.Count / 2);
+
+        Vector2 mean = Vector2.zero;
+        for (int i = 0; i < n; i++) mean += s[i].p;
+        mean /= n;
+
+        float sxx = 0f, syy = 0f, sxy = 0f;
+        for (int i = 0; i < n; i++)
+        {
+            Vector2 d = s[i].p - mean;
+            sxx += d.x * d.x;
+            syy += d.y * d.y;
+            sxy += d.x * d.y;
+        }
+
+        float ang = 0.5f * Mathf.Atan2(2f * sxy, sxx - syy);
+        Vector2 v = new(Mathf.Cos(ang), Mathf.Sin(ang));
+        if (Vector2.Dot(v, s[n - 1].p - s[0].p) < 0f) v = -v;
+
+        origin = mean;
+        dir = v;
+
+        float minT = float.PositiveInfinity, maxT = float.NegativeInfinity;
+        for (int i = 0; i < n; i++)
+        {
+            float t = Vector2.Dot(s[i].p - mean, v);
+            if (t < minT) minT = t;
+            if (t > maxT) maxT = t;
+        }
+
+        a = mean + v * minT;
+        b = mean + v * maxT;
+    }
+    private void OnDrawGizmos()
+    {
+        Debug.DrawRay(transform.position,transform.forward, Color.red);
     }
 
-    // Draw the original screen-space stroke as before
-    private void OnGUI()
+#if UNITY_EDITOR
+    static Vector2 ToGUI(Vector2 inputScreen) => new(inputScreen.x, Screen.height - inputScreen.y);
+
+    void OnGUI()
     {
         if (!Application.isPlaying) return;
         if (samples.Count < 2) return;
@@ -315,11 +468,10 @@ public class BowlingSwipe_ScreenAndWorldViz : MonoBehaviour
 
         Handles.color = Color.white;
         for (int i = 1; i < samples.Count; i++)
-        {
-            Vector2 a = ToGUI(samples[i - 1].screen);
-            Vector2 b = ToGUI(samples[i].screen);
-            Handles.DrawAAPolyLine(3.0f, a, b);
-        }
+            Handles.DrawAAPolyLine(3f, ToGUI(samples[i - 1].p), ToGUI(samples[i].p));
+
+        Handles.color = Color.yellow;
+        Handles.DrawAAPolyLine(4f, ToGUI(fitA), ToGUI(fitB));
 
         Handles.EndGUI();
     }
