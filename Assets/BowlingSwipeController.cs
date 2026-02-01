@@ -7,7 +7,7 @@ using UnityEditor;
 #endif
 
 [DisallowMultipleComponent]
-public class BowlingSwipe_ScreenAndWorldViz : MonoBehaviour
+public class BowlingSwipeController : MonoBehaviour
 {
     [Header("Input")]
     [SerializeField] InputActionAsset actions;
