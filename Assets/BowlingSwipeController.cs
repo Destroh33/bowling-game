@@ -73,6 +73,7 @@ public class BowlingSwipeController : MonoBehaviour
     Vector2 fitDir;
     Vector2 fitA, fitB;
 
+    [SerializeField] CameraMovement camMove;
     void Reset()
     {
         rb = GetComponent<Rigidbody>();
@@ -175,7 +176,6 @@ public class BowlingSwipeController : MonoBehaviour
     void Update()
     {
         if (!rb) return;
-        Debug.Log(rb.angularVelocity);
 
         if (!dragging || recordComplete || positionAction == null) return;
 
@@ -198,7 +198,7 @@ public class BowlingSwipeController : MonoBehaviour
 
     void OnPressStarted(InputAction.CallbackContext ctx)
     {
-        if (positionAction == null) return;
+        if (positionAction == null || rb.linearVelocity != Vector3.zero) return;
 
         dragging = true;
         recordComplete = false;
@@ -254,8 +254,13 @@ public class BowlingSwipeController : MonoBehaviour
 
         if (debugLogs)
             Debug.Log($"[SwipeViz] Launch velDir={worldDir} speed={speed:0.00} curve={curve01:0.000} spinAxis={spinAxis} spin={spin:0.00}");
+        camMove.speed = rb.linearVelocity.magnitude;
+        Invoke("CallWinCheck", 10f);
     }
-
+    void CallWinCheck()
+    {
+        GameManager.Instance.WinCheck();
+    }
     void RecomputeViz()
     {
         ComputeFitFromFirstHalf(samples, out fitOrigin, out fitDir, out fitA, out fitB);
