@@ -74,6 +74,8 @@ public class BowlingSwipeController : MonoBehaviour
     Vector2 fitA, fitB;
 
     [SerializeField] CameraMovement camMove;
+
+    [SerializeField] AudioSource source;
     void Reset()
     {
         rb = GetComponent<Rigidbody>();
@@ -171,6 +173,30 @@ public class BowlingSwipeController : MonoBehaviour
         lr.numCornerVertices = 4;
         lr.numCapVertices = 4;
         lr.material = new Material(Shader.Find("Sprites/Default"));
+    }
+
+    private void OnCollisionStay(Collision collision)
+    {
+        if(LayerMask.LayerToName(collision.gameObject.layer) == "Lane")
+        {
+            if(new Vector2(rb.linearVelocity.x,rb.linearVelocity.z).magnitude > 0.1f)
+            {
+                if(!source.isPlaying)
+                {
+                    source.Play();
+                }
+            }
+        }
+    }
+    private void OnCollisionExit(Collision collision)
+    {
+        if (LayerMask.LayerToName(collision.gameObject.layer) == "Lane")
+        {
+            if (source.isPlaying)
+            {
+                source.Stop();
+            }
+        }
     }
 
     void Update()
