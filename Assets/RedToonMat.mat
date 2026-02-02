@@ -26,7 +26,7 @@ Material:
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
-    - _RampSmoothness: 0.1
+    - _RampSmoothness: 0.001
     - _RampThreshold: 0.242
     - _RimPower: 4.95
     - _RimStrength: 0.26

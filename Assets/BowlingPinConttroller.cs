@@ -39,9 +39,8 @@ public class BowlingPinController : MonoBehaviour
     }
     private void CheckKnocked()
     {
-        if (Mathf.Approximately(transform.eulerAngles.x, originalRotation.x) == false)
-        {
-            isKnocked = true;
+        if(Mathf.Abs(transform.eulerAngles.x - originalRotation.x) > 10f) {
+        isKnocked = true;
             GameManager.Instance.AddKnock();
         }
     }

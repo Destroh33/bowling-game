@@ -255,11 +255,11 @@ public class BowlingSwipeController : MonoBehaviour
         if (debugLogs)
             Debug.Log($"[SwipeViz] Launch velDir={worldDir} speed={speed:0.00} curve={curve01:0.000} spinAxis={spinAxis} spin={spin:0.00}");
         camMove.speed = rb.linearVelocity.magnitude;
-        Invoke("CallWinCheck", 10f);
+        CallWinCheck();
     }
     void CallWinCheck()
     {
-        GameManager.Instance.WinCheck();
+        GameManager.Instance.StartWinChecking();
     }
     void RecomputeViz()
     {
@@ -467,6 +467,7 @@ public class BowlingSwipeController : MonoBehaviour
 
     void OnGUI()
     {
+        return;
         if (!Application.isPlaying) return;
         if (samples.Count < 2) return;
 

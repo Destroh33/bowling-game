@@ -36,15 +36,11 @@ Shader "Custom/StylizedSoftToonURP"
 
             HLSLPROGRAM
             #pragma target 3.0
-
             #pragma vertex vert
             #pragma fragment frag
 
-            // Main light shadows
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma multi_compile _ _SHADOWS_SOFT
-
-            // Additional lights (URP forward / forward+)
             #pragma multi_compile _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS
             #pragma multi_compile_fragment _ _ADDITIONAL_LIGHT_SHADOWS
 
@@ -72,35 +68,27 @@ Shader "Custom/StylizedSoftToonURP"
 
             struct Varyings
             {
-                float4 positionCS : SV_POSITION;
-                float3 positionWS : TEXCOORD0;
-                float3 normalWS   : TEXCOORD1;
-                float3 viewDirWS  : TEXCOORD2;
-                float4 shadowCoord : TEXCOORD3;
+                float4 positionCS   : SV_POSITION;
+                float3 positionWS   : TEXCOORD0;
+                float3 normalWS     : TEXCOORD1;
+                float3 viewDirWS    : TEXCOORD2;
+                float4 shadowCoord  : TEXCOORD3;
             };
 
             Varyings vert (Attributes IN)
             {
                 Varyings OUT;
-
                 VertexPositionInputs pos = GetVertexPositionInputs(IN.positionOS.xyz);
                 VertexNormalInputs   nor = GetVertexNormalInputs(IN.normalOS);
 
                 OUT.positionCS = pos.positionCS;
                 OUT.positionWS = pos.positionWS;
-
                 OUT.normalWS = normalize(nor.normalWS);
-
-                float3 viewWS = GetWorldSpaceViewDir(pos.positionWS);
-                OUT.viewDirWS = normalize(viewWS);
-
-                // Main light shadow coord
+                OUT.viewDirWS = normalize(GetWorldSpaceViewDir(pos.positionWS));
                 OUT.shadowCoord = TransformWorldToShadowCoord(pos.positionWS);
-
                 return OUT;
             }
 
-            // Soft-toon diffuse ramp
             inline float SoftRamp(float ndotl, float threshold, float smoothness)
             {
                 float e1 = threshold - smoothness;
@@ -108,12 +96,10 @@ Shader "Custom/StylizedSoftToonURP"
                 return smoothstep(e1, e2, ndotl);
             }
 
-            // Stylized spec: keep it gentle (not plastic)
             inline float StylizedSpec(float3 N, float3 L, float3 V, float power)
             {
                 float3 H = normalize(L + V);
                 float ndoth = saturate(dot(N, H));
-                // Slightly toon-ish shaping:
                 return pow(ndoth, power);
             }
 
@@ -122,10 +108,8 @@ Shader "Custom/StylizedSoftToonURP"
                 float3 N = normalize(IN.normalWS);
                 float3 V = normalize(IN.viewDirWS);
 
-                // Ambient (flat and controllable)
                 float3 col = _BaseColor.rgb * _AmbientColor.rgb;
 
-                // === Main light ===
                 Light mainLight = GetMainLight(IN.shadowCoord);
                 float3 Lm = normalize(mainLight.direction);
 
@@ -133,20 +117,16 @@ Shader "Custom/StylizedSoftToonURP"
                 float ramp_m  = SoftRamp(ndotl_m, _RampThreshold, _RampSmoothness);
 
                 float3 base_m = lerp(_ShadowTint.rgb, _BaseColor.rgb, ramp_m);
-
                 float atten_m = mainLight.distanceAttenuation * mainLight.shadowAttenuation;
 
-                // Diffuse
                 col += base_m * mainLight.color.rgb * atten_m;
 
-                // Gentle spec (optional)
                 if (_SpecStrength > 0.0001)
                 {
                     float spec_m = StylizedSpec(N, Lm, V, _SpecPower);
                     col += spec_m * _SpecStrength * mainLight.color.rgb * atten_m;
                 }
 
-                // Rim (optional, subtle)
                 if (_RimStrength > 0.0001)
                 {
                     float rim = 1.0 - saturate(dot(N, V));
@@ -154,7 +134,6 @@ Shader "Custom/StylizedSoftToonURP"
                     col += rim * _RimStrength * _RimColor.rgb;
                 }
 
-                // === Additional lights (optional) ===
                 #if defined(_ADDITIONAL_LIGHTS)
                 {
                     uint lightCount = GetAdditionalLightsCount();
@@ -167,7 +146,6 @@ Shader "Custom/StylizedSoftToonURP"
                         float ramp  = SoftRamp(ndotl, _RampThreshold, _RampSmoothness);
 
                         float3 base = lerp(_ShadowTint.rgb, _BaseColor.rgb, ramp);
-
                         float atten = light.distanceAttenuation * light.shadowAttenuation;
 
                         col += base * light.color.rgb * atten;
@@ -183,6 +161,28 @@ Shader "Custom/StylizedSoftToonURP"
 
                 return float4(col, 1.0);
             }
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "ShadowCaster"
+            Tags { "LightMode"="ShadowCaster" }
+
+            ZWrite On
+            ZTest LEqual
+            ColorMask 0
+            Cull Back
+
+            HLSLPROGRAM
+            #pragma target 3.0
+            #pragma vertex ShadowPassVertex
+            #pragma fragment ShadowPassFragment
+            #pragma multi_compile_vertex _ _CASTING_PUNCTUAL_LIGHT_SHADOW
+
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/Shaders/ShadowCasterPass.hlsl"
             ENDHLSL
         }
     }
