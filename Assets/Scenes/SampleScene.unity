@@ -2677,12 +2677,12 @@ MonoBehaviour:
   worldLineUpOffset: 0.02
   speedScale: 1
   minSpeed: 15
-  maxSpeed: 20
+  maxSpeed: 25
   faceTarget: {fileID: 0}
   maxSpinAroundVelocityRad: 100
   curveNormalizeFrac: 0.25
   curveMinDenomPx: 40
-  curveDeadzone: 0.06
+  curveDeadzone: 0.1
   useSignedCurve: 1
   debugLogs: 0
   camMove: {fileID: 330585548}
@@ -3356,6 +3356,8 @@ MonoBehaviour:
   - {fileID: 1151141748}
   winText: {fileID: 1002211480}
   pinsKnockedText: {fileID: 554080664}
+  winZoomDuration: 0.25
+  winPunchOvershoot: 1.12
 --- !u!1 &1749388306 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: 5986237967568449864, guid: 4255977e48d0e8a44b7e9935a90e7b25, type: 3}

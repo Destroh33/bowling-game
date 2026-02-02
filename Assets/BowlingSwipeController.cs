@@ -467,7 +467,6 @@ public class BowlingSwipeController : MonoBehaviour
 
     void OnGUI()
     {
-        return;
         if (!Application.isPlaying) return;
         if (samples.Count < 2) return;
 
