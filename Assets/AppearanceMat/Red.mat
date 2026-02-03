@@ -7,7 +7,7 @@ Material:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: RedToonMat
+  m_Name: Red
   m_Shader: {fileID: 4800000, guid: d6e39a2ae8b37604cb959edd5916600e, type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
@@ -26,17 +26,17 @@ Material:
     m_TexEnvs: []
     m_Ints: []
     m_Floats:
-    - _RampSmoothness: 0.001
-    - _RampThreshold: 0.242
-    - _RimPower: 4.95
-    - _RimStrength: 0.26
+    - _RampSmoothness: 0.035
+    - _RampThreshold: 0.257
+    - _RimPower: 1.59
+    - _RimStrength: 1
     - _SpecPower: 32
     - _SpecStrength: 0.05
     - _UseAdditionalLights: 1
     m_Colors:
     - _AmbientColor: {r: 0.17999998, g: 0.17999998, b: 0.17999998, a: 1}
-    - _BaseColor: {r: 0.9433962, g: 0, b: 0, a: 1}
+    - _BaseColor: {r: 1, g: 0.23316482, b: 0, a: 1}
     - _RimColor: {r: 1, g: 1, b: 1, a: 1}
-    - _ShadowTint: {r: 0.54999995, g: 0.54999995, b: 0.6, a: 1}
+    - _ShadowTint: {r: 1, g: 0.42856532, b: 0, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1

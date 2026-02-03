@@ -234,7 +234,7 @@ public class BowlingSwipeController : MonoBehaviour
 
         swipeStartTime = Time.unscaledTime;
         Vector2 start = positionAction.ReadValue<Vector2>();
-        samples.Add(new Sample(start, swipeStartTime));
+        //samples.Add(new Sample(start, swipeStartTime));
 
         RecomputeViz();
 
