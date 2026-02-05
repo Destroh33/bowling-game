@@ -1471,7 +1471,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3139148141861253572, guid: aa074bcb6d045064194aea6d5bd065cf, type: 3}
       propertyPath: m_LocalPosition.z
-      value: -3.6100006
+      value: -5.31
       objectReference: {fileID: 0}
     - target: {fileID: 3139148141861253572, guid: aa074bcb6d045064194aea6d5bd065cf, type: 3}
       propertyPath: m_LocalRotation.w
@@ -2720,7 +2720,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3139148141861253572, guid: aa074bcb6d045064194aea6d5bd065cf, type: 3}
       propertyPath: m_LocalPosition.z
-      value: -3.6100006
+      value: -3.33
       objectReference: {fileID: 0}
     - target: {fileID: 3139148141861253572, guid: aa074bcb6d045064194aea6d5bd065cf, type: 3}
       propertyPath: m_LocalRotation.w
@@ -10775,7 +10775,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3139148141861253572, guid: aa074bcb6d045064194aea6d5bd065cf, type: 3}
       propertyPath: m_LocalPosition.z
-      value: -3.6100006
+      value: -4.45
       objectReference: {fileID: 0}
     - target: {fileID: 3139148141861253572, guid: aa074bcb6d045064194aea6d5bd065cf, type: 3}
       propertyPath: m_LocalRotation.w
@@ -11427,7 +11427,7 @@ MonoBehaviour:
   laneTimeLimitSeconds: 10
   strikeToNextLaneDelay: 2.5
   cameraFlySpeedToNextLane: 60
-  restartWholeLevelOnNoStrike: 1
+  restartWholeLevelOnNoStrike: 0
   handImage: {fileID: 1382017225}
 --- !u!1 &1657578445 stripped
 GameObject:
@@ -12754,7 +12754,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 3139148141861253572, guid: aa074bcb6d045064194aea6d5bd065cf, type: 3}
       propertyPath: m_LocalPosition.z
-      value: -3.6100006
+      value: -3.93
       objectReference: {fileID: 0}
     - target: {fileID: 3139148141861253572, guid: aa074bcb6d045064194aea6d5bd065cf, type: 3}
       propertyPath: m_LocalRotation.w
