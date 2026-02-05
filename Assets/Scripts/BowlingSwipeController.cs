@@ -46,11 +46,20 @@ public class BowlingSwipeController : MonoBehaviour
     [Header("Facing")]
     [SerializeField] Transform faceTarget;
 
-    [Header("Spin from second-half curve")]
+    [Header("Spin from second-half CURVE (bend)")]
+    [Tooltip("Max angular velocity magnitude applied from curve (radians/sec).")]
     [SerializeField] float maxSpinAroundVelocityRad = 30f;
-    [SerializeField] float curveNormalizeFrac = 0.25f;
-    [SerializeField] float curveMinDenomPx = 40f;
-    [SerializeField] float curveDeadzone = 0.06f;
+
+    [Tooltip("How much bend angle (in degrees) maps to curve=1. Bigger = less sensitive.")]
+    [SerializeField] float curveMaxBendAngleDeg = 35f;
+
+    [Tooltip("Ignore tiny bend (0..1 after normalization). Higher = less sensitive.")]
+    [SerializeField] float curveDeadzone = 0.10f;
+
+    [Tooltip("Nonlinear response. >1 makes subtle curves weaker and big curves stronger.")]
+    [SerializeField] float curveExponent = 2.2f;
+
+    [Tooltip("If false, curve is absolute (always curves same direction).")]
     [SerializeField] bool useSignedCurve = true;
 
     [Header("Logs")]
@@ -88,6 +97,7 @@ public class BowlingSwipeController : MonoBehaviour
 
     private bool firstShot = true;
     [SerializeField] GameObject handImage;
+
     void Reset()
     {
         rb = GetComponent<Rigidbody>();
@@ -295,13 +305,19 @@ public class BowlingSwipeController : MonoBehaviour
         worldDir.Normalize();
 
         float swipeLenPx = (fitB - fitA).magnitude;
-        float speed = Mathf.Clamp(swipeLenPx * pixelsToWorld / Mathf.Max(0.001f, maxRecordSeconds) * speedScale, minSpeed, maxSpeed);
+        float speed = Mathf.Clamp(
+            swipeLenPx * pixelsToWorld / Mathf.Max(0.001f, maxRecordSeconds) * speedScale,
+            minSpeed, maxSpeed
+        );
 
-        float curve01 = ComputeSecondHalfCurve01(samples, fitOrigin, fitDir, swipeLenPx, curveNormalizeFrac, curveMinDenomPx);
-        float signedCurve = useSignedCurve ? curve01 : Mathf.Abs(curve01);
-        if (Mathf.Abs(signedCurve) < curveDeadzone) signedCurve = 0f;
+        // SECOND HALF (by SCREEN Y distance): compute "bend" not "offset"
+        float bend01 = ComputeSecondHalfBend01_ByScreenYHalf(
+            samples, fitOrigin, fitDir,
+            curveMaxBendAngleDeg, curveDeadzone, curveExponent
+        );
 
-        float spin = signedCurve * maxSpinAroundVelocityRad;
+        float signedBend = useSignedCurve ? bend01 : Mathf.Abs(bend01);
+        float spin = signedBend * maxSpinAroundVelocityRad;
 
         Vector3 spinAxis = faceTarget ? faceTarget.forward : transform.forward;
         spinAxis.y = 0f;
@@ -315,11 +331,12 @@ public class BowlingSwipeController : MonoBehaviour
         rb.angularVelocity = spinAxis * spin;
 
         if (debugLogs)
-            Debug.Log($"[SwipeViz] Launch velDir={worldDir} speed={speed:0.00} curve={curve01:0.000} spinAxis={spinAxis} spin={spin:0.00}");
+            Debug.Log($"[SwipeViz] Launch velDir={worldDir} speed={speed:0.00} bend01={bend01:0.000} spinAxis={spinAxis} spin={spin:0.00}");
 
         GameManager.Instance.OnBallThrown(15f);
         CallWinCheck();
     }
+
     void CallWinCheck()
     {
         GameManager.Instance.StartWinChecking();
@@ -327,7 +344,8 @@ public class BowlingSwipeController : MonoBehaviour
 
     void RecomputeViz()
     {
-        ComputeFitFromFirstHalf(samples, out fitOrigin, out fitDir, out fitA, out fitB);
+        // FIRST HALF (by SCREEN Y distance): fit direction
+        ComputeFitFromFirstHalf_ByScreenYHalf(samples, out fitOrigin, out fitDir, out fitA, out fitB);
 
         if (!drawWorldPath) return;
 
@@ -342,30 +360,268 @@ public class BowlingSwipeController : MonoBehaviour
             worldFitLine.positionCount = 0;
     }
 
-    static float ComputeSecondHalfCurve01(List<Sample> s, Vector2 origin, Vector2 dir, float swipeLenPx, float normFrac, float minDenomPx)
+    // ---------- NEW: split by SCREEN Y distance ----------
+
+    // Returns the screen Y midpoint for "half distance" and the swipe direction sign (up or down).
+    static bool TryGetScreenYHalfMid(List<Sample> s, out float midY, out bool goingUp)
+    {
+        midY = 0f;
+        goingUp = true;
+        if (s == null || s.Count < 2) return false;
+
+        float y0 = s[0].p.y;
+        float y1 = s[s.Count - 1].p.y;
+        float dy = y1 - y0;
+
+        if (Mathf.Abs(dy) < 1e-3f) return false;
+
+        goingUp = dy > 0f;
+        midY = y0 + dy * 0.5f; // halfway by Y distance
+        return true;
+    }
+
+    static void ComputeFitFromFirstHalf_ByScreenYHalf(List<Sample> s, out Vector2 origin, out Vector2 dir, out Vector2 a, out Vector2 b)
+    {
+        origin = Vector2.zero;
+        dir = Vector2.up;
+        a = b = Vector2.zero;
+
+        if (s == null || s.Count < 2) return;
+
+        // If we can't split by Y distance, fall back to old count-based behavior.
+        if (!TryGetScreenYHalfMid(s, out float midY, out bool goingUp))
+        {
+            ComputeFitFromFirstHalf_Count(s, out origin, out dir, out a, out b);
+            return;
+        }
+
+        // Collect points in the first half by Y distance.
+        // If swiping up: y <= midY is "first half".
+        // If swiping down: y >= midY is "first half".
+        List<Vector2> pts = new List<Vector2>(s.Count);
+        for (int i = 0; i < s.Count; i++)
+        {
+            float y = s[i].p.y;
+            bool inFirstHalf = goingUp ? (y <= midY) : (y >= midY);
+            if (inFirstHalf) pts.Add(s[i].p);
+        }
+
+        if (pts.Count < 2)
+        {
+            // fallback: at least 2 points
+            pts.Clear();
+            pts.Add(s[0].p);
+            pts.Add(s[1].p);
+        }
+
+        // PCA line fit on pts
+        Vector2 mean = Vector2.zero;
+        for (int i = 0; i < pts.Count; i++) mean += pts[i];
+        mean /= pts.Count;
+
+        float sxx = 0f, syy = 0f, sxy = 0f;
+        for (int i = 0; i < pts.Count; i++)
+        {
+            Vector2 d = pts[i] - mean;
+            sxx += d.x * d.x;
+            syy += d.y * d.y;
+            sxy += d.x * d.y;
+        }
+
+        float ang = 0.5f * Mathf.Atan2(2f * sxy, sxx - syy);
+        Vector2 v = new(Mathf.Cos(ang), Mathf.Sin(ang));
+
+        // Point the direction from start toward end (overall swipe direction)
+        Vector2 overall = s[s.Count - 1].p - s[0].p;
+        if (Vector2.Dot(v, overall) < 0f) v = -v;
+
+        origin = mean;
+        dir = v;
+
+        float minT = float.PositiveInfinity, maxT = float.NegativeInfinity;
+        for (int i = 0; i < pts.Count; i++)
+        {
+            float t = Vector2.Dot(pts[i] - mean, v);
+            if (t < minT) minT = t;
+            if (t > maxT) maxT = t;
+        }
+
+        a = mean + v * minT;
+        b = mean + v * maxT;
+    }
+
+    // SECOND HALF bend metric by Y distance
+    static float ComputeSecondHalfBend01_ByScreenYHalf(
+        List<Sample> s, Vector2 origin, Vector2 dir,
+        float maxBendAngleDeg, float deadzone01, float exponent)
     {
         if (s == null || s.Count < 6) return 0f;
+        if (dir.sqrMagnitude < 1e-6f) return 0f;
+
+        // If we can't split by Y distance, fall back to old "second half by count".
+        if (!TryGetScreenYHalfMid(s, out float midY, out bool goingUp))
+            return ComputeSecondHalfBend01_ByCountHalf(s, origin, dir, maxBendAngleDeg, deadzone01, exponent);
+
+        dir.Normalize();
+        Vector2 perp = new(-dir.y, dir.x);
+
+        // Gather second half points (by Y distance).
+        // If swiping up: y > midY is "second half".
+        // If swiping down: y < midY is "second half".
+        List<Vector2> pts = new List<Vector2>(s.Count);
+        for (int i = 0; i < s.Count; i++)
+        {
+            float y = s[i].p.y;
+            bool inSecondHalf = goingUp ? (y > midY) : (y < midY);
+            if (inSecondHalf) pts.Add(s[i].p);
+        }
+
+        if (pts.Count < 3) return 0f;
+
+        // Build u (along) and v (lateral) for regression.
+        float meanU = 0f, meanV = 0f;
+        for (int i = 0; i < pts.Count; i++)
+        {
+            Vector2 d = pts[i] - origin;
+            float u = Vector2.Dot(d, dir);
+            float v = Vector2.Dot(d, perp);
+            meanU += u;
+            meanV += v;
+        }
+        meanU /= pts.Count;
+        meanV /= pts.Count;
+
+        float suu = 0f;
+        float suv = 0f;
+        for (int i = 0; i < pts.Count; i++)
+        {
+            Vector2 d = pts[i] - origin;
+            float u = Vector2.Dot(d, dir) - meanU;
+            float v = Vector2.Dot(d, perp) - meanV;
+            suu += u * u;
+            suv += u * v;
+        }
+
+        if (suu < 1e-4f) return 0f;
+
+        // slope m = dv/du, then bend angle = atan(m)
+        float m = suv / suu;
+        float bendRad = Mathf.Atan(m);
+
+        float maxRad = Mathf.Max(0.001f, maxBendAngleDeg * Mathf.Deg2Rad);
+        float norm = Mathf.Clamp(bendRad / maxRad, -1f, 1f);
+
+        // Deadzone + nonlinear ramp
+        float a = Mathf.Abs(norm);
+        float dz = Mathf.Clamp01(deadzone01);
+        if (a <= dz) return 0f;
+
+        float x = Mathf.InverseLerp(dz, 1f, a);
+        x = Mathf.SmoothStep(0f, 1f, x);
+        x = Mathf.Pow(x, Mathf.Max(0.01f, exponent));
+
+        return Mathf.Sign(norm) * x;
+    }
+
+    // ---------- FALLBACKS (count based) ----------
+    static void ComputeFitFromFirstHalf_Count(List<Sample> s, out Vector2 origin, out Vector2 dir, out Vector2 a, out Vector2 b)
+    {
+        origin = Vector2.zero;
+        dir = Vector2.up;
+        a = b = Vector2.zero;
+
+        if (s == null || s.Count < 2) return;
+
+        int n = Mathf.Max(2, s.Count / 2);
+
+        Vector2 mean = Vector2.zero;
+        for (int i = 0; i < n; i++) mean += s[i].p;
+        mean /= n;
+
+        float sxx = 0f, syy = 0f, sxy = 0f;
+        for (int i = 0; i < n; i++)
+        {
+            Vector2 d = s[i].p - mean;
+            sxx += d.x * d.x;
+            syy += d.y * d.y;
+            sxy += d.x * d.y;
+        }
+
+        float ang = 0.5f * Mathf.Atan2(2f * sxy, sxx - syy);
+        Vector2 v = new(Mathf.Cos(ang), Mathf.Sin(ang));
+        if (Vector2.Dot(v, s[n - 1].p - s[0].p) < 0f) v = -v;
+
+        origin = mean;
+        dir = v;
+
+        float minT = float.PositiveInfinity, maxT = float.NegativeInfinity;
+        for (int i = 0; i < n; i++)
+        {
+            float t = Vector2.Dot(s[i].p - mean, v);
+            if (t < minT) minT = t;
+            if (t > maxT) maxT = t;
+        }
+
+        a = mean + v * minT;
+        b = mean + v * maxT;
+    }
+
+    static float ComputeSecondHalfBend01_ByCountHalf(
+        List<Sample> s, Vector2 origin, Vector2 dir,
+        float maxBendAngleDeg, float deadzone01, float exponent)
+    {
+        if (s == null || s.Count < 6) return 0f;
+        if (dir.sqrMagnitude < 1e-6f) return 0f;
+
+        dir.Normalize();
+        Vector2 perp = new(-dir.y, dir.x);
 
         int start = s.Count / 2;
         int n = s.Count - start;
-        if (n < 2) return 0f;
+        if (n < 3) return 0f;
 
-        Vector2 perp = new(-dir.y, dir.x);
-
-        float sum = 0f;
+        float meanU = 0f, meanV = 0f;
         for (int i = start; i < s.Count; i++)
         {
-            Vector2 p = s[i].p;
-            float t = Vector2.Dot(p - origin, dir);
-            Vector2 proj = origin + dir * t;
-            float lateral = Vector2.Dot(p - proj, perp);
-            sum += lateral;
+            Vector2 d = s[i].p - origin;
+            float u = Vector2.Dot(d, dir);
+            float v = Vector2.Dot(d, perp);
+            meanU += u;
+            meanV += v;
+        }
+        meanU /= n;
+        meanV /= n;
+
+        float suu = 0f, suv = 0f;
+        for (int i = start; i < s.Count; i++)
+        {
+            Vector2 d = s[i].p - origin;
+            float u = Vector2.Dot(d, dir) - meanU;
+            float v = Vector2.Dot(d, perp) - meanV;
+            suu += u * u;
+            suv += u * v;
         }
 
-        float avg = sum / n;
-        float denom = Mathf.Max(minDenomPx, Mathf.Max(1f, swipeLenPx) * Mathf.Max(0.01f, normFrac));
-        return Mathf.Clamp(avg / denom, -1f, 1f);
+        if (suu < 1e-4f) return 0f;
+
+        float m = suv / suu;
+        float bendRad = Mathf.Atan(m);
+
+        float maxRad = Mathf.Max(0.001f, maxBendAngleDeg * Mathf.Deg2Rad);
+        float norm = Mathf.Clamp(bendRad / maxRad, -1f, 1f);
+
+        float a = Mathf.Abs(norm);
+        float dz = Mathf.Clamp01(deadzone01);
+        if (a <= dz) return 0f;
+
+        float x = Mathf.InverseLerp(dz, 1f, a);
+        x = Mathf.SmoothStep(0f, 1f, x);
+        x = Mathf.Pow(x, Mathf.Max(0.01f, exponent));
+
+        return Mathf.Sign(norm) * x;
     }
+
+    // ---------- existing world mapping / viz ----------
 
     bool BuildWorldPathFromSamples(List<Sample> s, List<Vector3> outPath)
     {
@@ -479,46 +735,10 @@ public class BowlingSwipeController : MonoBehaviour
             pts.RemoveRange(write, pts.Count - write);
     }
 
-    static void ComputeFitFromFirstHalf(List<Sample> s, out Vector2 origin, out Vector2 dir, out Vector2 a, out Vector2 b)
+    void HideTutorialAnim()
     {
-        origin = Vector2.zero;
-        dir = Vector2.up;
-        a = b = Vector2.zero;
-
-        if (s == null || s.Count < 2) return;
-
-        int n = Mathf.Max(2, s.Count / 2);
-
-        Vector2 mean = Vector2.zero;
-        for (int i = 0; i < n; i++) mean += s[i].p;
-        mean /= n;
-
-        float sxx = 0f, syy = 0f, sxy = 0f;
-        for (int i = 0; i < n; i++)
-        {
-            Vector2 d = s[i].p - mean;
-            sxx += d.x * d.x;
-            syy += d.y * d.y;
-            sxy += d.x * d.y;
-        }
-
-        float ang = 0.5f * Mathf.Atan2(2f * sxy, sxx - syy);
-        Vector2 v = new(Mathf.Cos(ang), Mathf.Sin(ang));
-        if (Vector2.Dot(v, s[n - 1].p - s[0].p) < 0f) v = -v;
-
-        origin = mean;
-        dir = v;
-
-        float minT = float.PositiveInfinity, maxT = float.NegativeInfinity;
-        for (int i = 0; i < n; i++)
-        {
-            float t = Vector2.Dot(s[i].p - mean, v);
-            if (t < minT) minT = t;
-            if (t > maxT) maxT = t;
-        }
-
-        a = mean + v * minT;
-        b = mean + v * maxT;
+        if (handImage != null)
+            handImage.SetActive(false);
     }
 
     void OnDrawGizmos()
