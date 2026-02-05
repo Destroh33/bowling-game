@@ -16,7 +16,7 @@ public class ScalePowerupAbility : PowerupAbilityBase
     public override void Activate(GameObject player)
     {
         player.transform.localScale *= 1.5f;
-        player.GetComponent<Rigidbody>().mass *= 1.5f;  
+        player.GetComponent<Rigidbody>().mass *= 5f;  
         Debug.Log("Scale Powerup Activated: Player size increased!");
     }
 }

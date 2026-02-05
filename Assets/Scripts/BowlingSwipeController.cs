@@ -76,6 +76,18 @@ public class BowlingSwipeController : MonoBehaviour
     [SerializeField] CameraMovement camMove;
 
     [SerializeField] AudioSource source;
+
+    [Header("Rolling Audio")]
+    [SerializeField] float rollMinSpeed = 0.15f;
+    [SerializeField] float rollMaxSpeed = 10f;
+    [SerializeField] float rollMinVolume = 0.05f;
+    [SerializeField] float rollMaxVolume = 0.6f;
+    [SerializeField] float rollVolumeLerp = 12f;
+
+    bool onLane;
+
+    private bool firstShot = true;
+    [SerializeField] GameObject handImage;
     void Reset()
     {
         rb = GetComponent<Rigidbody>();
@@ -86,10 +98,15 @@ public class BowlingSwipeController : MonoBehaviour
     {
         if (!rb) rb = GetComponent<Rigidbody>();
         if (!cam) cam = Camera.main;
+        Debug.Log(Camera.main);
+        camMove = cam.GetComponent<CameraMovement>();
         ResolveActions();
         EnsureLines();
         if (!faceTarget) faceTarget = rb ? rb.transform : transform;
         rb.maxAngularVelocity = 50000f;
+
+        if (source != null)
+            source.volume = 0f;
     }
 
     void OnEnable()
@@ -177,26 +194,46 @@ public class BowlingSwipeController : MonoBehaviour
 
     private void OnCollisionStay(Collision collision)
     {
-        if(LayerMask.LayerToName(collision.gameObject.layer) == "Lane")
+        if (LayerMask.LayerToName(collision.gameObject.layer) == "Lane")
         {
-            if(new Vector2(rb.linearVelocity.x,rb.linearVelocity.z).magnitude > 0.1f)
-            {
-                if(!source.isPlaying)
-                {
-                    source.Play();
-                }
-            }
+            onLane = true;
+
+            if (source != null && !source.isPlaying)
+                source.Play();
         }
     }
+
     private void OnCollisionExit(Collision collision)
     {
         if (LayerMask.LayerToName(collision.gameObject.layer) == "Lane")
         {
-            if (source.isPlaying)
-            {
+            onLane = false;
+
+            if (source != null && source.isPlaying)
                 source.Stop();
-            }
         }
+    }
+
+    void LateUpdate()
+    {
+        if (source == null || rb == null) return;
+
+        if (!onLane)
+        {
+            source.volume = Mathf.Lerp(source.volume, 0f, rollVolumeLerp * Time.deltaTime);
+            return;
+        }
+
+        Vector2 planar = new Vector2(rb.linearVelocity.x, rb.linearVelocity.z);
+        float spd = planar.magnitude;
+
+        float t = Mathf.InverseLerp(rollMinSpeed, rollMaxSpeed, spd);
+        float targetVol = Mathf.Lerp(rollMinVolume, rollMaxVolume, t);
+
+        source.volume = Mathf.Lerp(source.volume, targetVol, rollVolumeLerp * Time.deltaTime);
+
+        if (spd < rollMinSpeed * 0.5f)
+            source.volume = Mathf.Lerp(source.volume, 0f, rollVolumeLerp * Time.deltaTime);
     }
 
     void Update()
@@ -234,7 +271,6 @@ public class BowlingSwipeController : MonoBehaviour
 
         swipeStartTime = Time.unscaledTime;
         Vector2 start = positionAction.ReadValue<Vector2>();
-        //samples.Add(new Sample(start, swipeStartTime));
 
         RecomputeViz();
 
@@ -280,13 +316,15 @@ public class BowlingSwipeController : MonoBehaviour
 
         if (debugLogs)
             Debug.Log($"[SwipeViz] Launch velDir={worldDir} speed={speed:0.00} curve={curve01:0.000} spinAxis={spinAxis} spin={spin:0.00}");
-        camMove.speed = rb.linearVelocity.magnitude;
+
+        GameManager.Instance.OnBallThrown(15f);
         CallWinCheck();
     }
     void CallWinCheck()
     {
         GameManager.Instance.StartWinChecking();
     }
+
     void RecomputeViz()
     {
         ComputeFitFromFirstHalf(samples, out fitOrigin, out fitDir, out fitA, out fitB);

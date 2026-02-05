@@ -2,17 +2,40 @@ using UnityEngine;
 
 public class CameraMovement : MonoBehaviour
 {
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
     [SerializeField] Transform newLoc;
-    public float speed = 0;
-    void Start()
-    {
-        
-    }
 
-    // Update is called once per frame
+    [SerializeField] float speedScale = 0.8f;
+
+    float moveSpeed = 0f;
+    float trackSpeed = -1f;
+
     void Update()
     {
-        transform.position = Vector3.MoveTowards(transform.position, newLoc.position, speed*0.8f * Time.deltaTime);
+        if (newLoc == null)
+            return;
+
+        float s = trackSpeed >= 0f ? trackSpeed : moveSpeed;
+        transform.position = Vector3.MoveTowards(transform.position, newLoc.position, s * speedScale * Time.deltaTime);
+    }
+
+    public void SetTarget(Transform target)
+    {
+        newLoc = target;
+    }
+
+    public void SetMoveSpeed(float s)
+    {
+        moveSpeed = Mathf.Max(0f, s);
+        Debug.Log($"Camera move speed set to {moveSpeed}");
+    }
+
+    public void SetTrackSpeedFromBall(float initialXVelocity)
+    {
+        trackSpeed = Mathf.Abs(initialXVelocity);
+    }
+
+    public void ClearTrackSpeed()
+    {
+        trackSpeed = -1f;
     }
 }
