@@ -82,7 +82,7 @@ public class GameManager : MonoBehaviour
         _strike = KnockedCheck();
 
         if (pinsKnockedText != null)
-            pinsKnockedText.text = $"Lane {_currentLaneIndex + 1}/{Mathf.Max(1, lanes.Count)}  Pins Knocked: {_pinsKnockedThisLane}/10";
+            pinsKnockedText.text = $"Lane {_currentLaneIndex + 1}/{Mathf.Max(1, lanes.Count)}  Pins Knocked: {_pinsKnockedThisLane}";
 
         if (_strike != _cachedStrike)
         {
@@ -127,7 +127,7 @@ public class GameManager : MonoBehaviour
         if (_nextLaneRoutine != null) { StopCoroutine(_nextLaneRoutine); _nextLaneRoutine = null; }
 
         _activePins.Clear();
-        _pinsKnockedThisLane = 0;
+        //_pinsKnockedThisLane = 0;
         _strike = false;
         _cachedStrike = false;
 
@@ -252,7 +252,11 @@ public class GameManager : MonoBehaviour
         }
         else
         {
-            RestartCurrentLane();
+            //RestartCurrentLane();
+            if (_currentLaneIndex == lanes.Count - 1)
+                ReloadScene();
+            else
+                SetLane(_currentLaneIndex + 1, true);
         }
     }
 
