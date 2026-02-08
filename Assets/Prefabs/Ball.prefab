@@ -120,13 +120,19 @@ MonoBehaviour:
   maxSpeed: 25
   faceTarget: {fileID: 0}
   maxSpinAroundVelocityRad: 100
-  curveNormalizeFrac: 0.25
-  curveMinDenomPx: 40
+  curveMaxBendAngleDeg: 35
   curveDeadzone: 0.1
+  curveExponent: 3
   useSignedCurve: 1
   debugLogs: 0
   camMove: {fileID: 0}
   source: {fileID: 2371606316963584039}
+  rollMinSpeed: 0.15
+  rollMaxSpeed: 10
+  rollMinVolume: 0.05
+  rollMaxVolume: 0.6
+  rollVolumeLerp: 12
+  handImage: {fileID: 0}
 --- !u!82 &2371606316963584039
 AudioSource:
   m_ObjectHideFlags: 0
