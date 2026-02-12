@@ -199,6 +199,7 @@ public class GameManager : MonoBehaviour
         _ballRb = null;
 
         var lane = lanes[_currentLaneIndex];
+        _startWinCheck = false;
 
         if (ballPrefab != null && lane.ballStartTransform != null)
         {
