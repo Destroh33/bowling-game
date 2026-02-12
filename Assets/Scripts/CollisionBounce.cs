@@ -5,6 +5,7 @@ public class CollisionBounce : MonoBehaviour
     // Start is called once before the first execution of Update after the MonoBehaviour is created
     public float reflectMult = 3f;
     public Vector3 forceDir = Vector3.left;
+    [SerializeField] AudioSource audioSource;
     void Start()
     {
         
@@ -23,6 +24,8 @@ public class CollisionBounce : MonoBehaviour
         if (rb != null)
         {
             rb.AddForce(forceDir.normalized * reflectMult, ForceMode.Impulse);
+            audioSource.PlayOneShot(audioSource.clip);
+
         }   
     }
 }

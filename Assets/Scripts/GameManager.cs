@@ -8,6 +8,8 @@ public class GameManager : MonoBehaviour
 {
     public static GameManager Instance { get; private set; }
 
+    public static int LastScore = 0;
+
     [Serializable]
     public struct Lane
     {
@@ -33,24 +35,34 @@ public class GameManager : MonoBehaviour
 
     [SerializeField] private bool restartWholeLevelOnNoStrike = true;
 
+    [SerializeField] private string mainSceneName = "MainScene";
+    [SerializeField] private float finalLaneReturnDelay = 2.5f;
+
     private readonly List<BowlingPinController> _activePins = new List<BowlingPinController>();
 
     private int _currentLaneIndex = 0;
 
     private bool _startWinCheck = false;
-    private bool _strike = false;
-    private bool _cachedStrike = false;
 
     private int _pinsKnockedThisLane = 0;
+    private int _pinsTotalThisLane = 10;
 
-    private Coroutine _winZoomRoutine;
+    private int _pinsKnockedOverall = 0;
+    private int _pinsTotalOverall = 0;
+
+    private Coroutine _popRoutine;
     private Coroutine _laneTimerRoutine;
     private Coroutine _nextLaneRoutine;
 
     private GameObject _currentBallInstance;
     private Rigidbody _ballRb;
-    private bool firstShot = true; 
+
+    private bool firstShot = true;
     [SerializeField] private GameObject handImage;
+
+    [SerializeField] private AudioSource victorySource;
+    [SerializeField] private AudioSource pointSource;
+
     void Awake()
     {
         if (Instance != null && Instance != this)
@@ -66,37 +78,86 @@ public class GameManager : MonoBehaviour
             winText.enabled = false;
             winText.rectTransform.localScale = Vector3.zero;
         }
+
+        if (pinsKnockedText != null)
+            pinsKnockedText.enabled = true;
     }
 
     void Start()
     {
+        StampAllPinsLaneNumbers();
+        RecalcOverallTotalPins();
+
         if (lanes != null && lanes.Count > 0)
             SetLane(0, true);
+
+        UpdateScoreText();
     }
 
     void Update()
     {
-        if (!_startWinCheck)
-            return;
+        UpdateScoreText();
+    }
 
-        _strike = KnockedCheck();
+    void StampAllPinsLaneNumbers()
+    {
+        if (lanes == null) return;
 
-        if (pinsKnockedText != null)
-            pinsKnockedText.text = $"Lane {_currentLaneIndex + 1}/{Mathf.Max(1, lanes.Count)}  Pins Knocked: {_pinsKnockedThisLane}";
-
-        if (_strike != _cachedStrike)
+        for (int i = 0; i < lanes.Count; i++)
         {
-            _cachedStrike = _strike;
-            if (_strike)
-                OnStrike();
+            var root = lanes[i].pinsRoot;
+            if (root == null) continue;
+
+            var pins = root.GetComponentsInChildren<BowlingPinController>(true);
+            if (pins == null) continue;
+
+            for (int p = 0; p < pins.Length; p++)
+            {
+                if (pins[p] != null)
+                    pins[p].SetLaneNumber(i);
+            }
         }
+    }
+
+    void RecalcOverallTotalPins()
+    {
+        int total = 0;
+
+        if (lanes != null)
+        {
+            for (int i = 0; i < lanes.Count; i++)
+            {
+                var root = lanes[i].pinsRoot;
+                if (root == null) continue;
+
+                var pins = root.GetComponentsInChildren<BowlingPinController>(true);
+                if (pins != null) total += pins.Length;
+            }
+        }
+
+        _pinsTotalOverall = Mathf.Max(1, total);
+        _pinsKnockedOverall = Mathf.Clamp(_pinsKnockedOverall, 0, _pinsTotalOverall);
+    }
+
+    void UpdateScoreText()
+    {
+        if (pinsKnockedText == null) return;
+
+        if (!pinsKnockedText.enabled)
+            pinsKnockedText.enabled = true;
+
+        int laneCount = Mathf.Max(1, lanes.Count);
+        int laneNum = Mathf.Clamp(_currentLaneIndex + 1, 1, laneCount);
+
+        int overallTotal = Mathf.Max(1, _pinsTotalOverall);
+        int overallKnocked = Mathf.Clamp(_pinsKnockedOverall, 0, overallTotal);
+
+        pinsKnockedText.text = $"Lane {laneNum}/{laneCount}  Pins Knocked: {overallKnocked}/{overallTotal}";
     }
 
     public void StartWinChecking()
     {
         _startWinCheck = true;
-        _strike = false;
-        _cachedStrike = false;
         StartLaneTimer();
     }
 
@@ -107,6 +168,7 @@ public class GameManager : MonoBehaviour
             firstShot = false;
             HideTutorialAnim();
         }
+
         if (cameraMovement != null)
         {
             cameraMovement.SetTrackSpeedFromBall(initialXVelocity);
@@ -127,9 +189,8 @@ public class GameManager : MonoBehaviour
         if (_nextLaneRoutine != null) { StopCoroutine(_nextLaneRoutine); _nextLaneRoutine = null; }
 
         _activePins.Clear();
-        //_pinsKnockedThisLane = 0;
-        _strike = false;
-        _cachedStrike = false;
+        _pinsKnockedThisLane = 0;
+        _pinsTotalThisLane = 10;
 
         if (_currentBallInstance != null)
             Destroy(_currentBallInstance);
@@ -152,7 +213,12 @@ public class GameManager : MonoBehaviour
 
         var pinsRoot = lane.pinsRoot;
         if (pinsRoot != null)
+        {
             _activePins.AddRange(pinsRoot.GetComponentsInChildren<BowlingPinController>(true));
+            _pinsTotalThisLane = Mathf.Max(1, _activePins.Count);
+        }
+
+        if (_popRoutine != null) { StopCoroutine(_popRoutine); _popRoutine = null; }
 
         if (winText != null)
         {
@@ -173,20 +239,55 @@ public class GameManager : MonoBehaviour
             cameraMovement.ClearTrackSpeed();
         }
 
+        if (pinsKnockedText != null)
+            pinsKnockedText.enabled = true;
+
+        UpdateScoreText();
+
         if (_startWinCheck)
             StartLaneTimer();
+    }
+
+    public void AddKnock(int laneNumber)
+    {
+        _pinsKnockedOverall = Mathf.Clamp(_pinsKnockedOverall + 1, 0, Mathf.Max(1, _pinsTotalOverall));
+        UpdateScoreText();
+
+        if (laneNumber != _currentLaneIndex)
+            return;
+
+        _pinsKnockedThisLane = Mathf.Clamp(_pinsKnockedThisLane + 1, 0, Mathf.Max(1, _pinsTotalThisLane));
+
+        if (_pinsKnockedThisLane >= Mathf.Max(1, _pinsTotalThisLane))
+        {
+            ShowPop("STRIKE");
+            OnStrike();
+            return;
+        }
+
+        if (pointSource != null && pointSource.clip != null)
+            pointSource.PlayOneShot(pointSource.clip);
+
+        ShowPop($"{_pinsKnockedThisLane}/{Mathf.Max(1, _pinsTotalThisLane)}");
+    }
+
+    void ShowPop(string text)
+    {
+        if (winText == null) return;
+
+        winText.text = text;
+        winText.enabled = true;
+
+        if (_popRoutine != null) StopCoroutine(_popRoutine);
+        _popRoutine = StartCoroutine(PopZoom());
     }
 
     private void OnStrike()
     {
         StopLaneTimer();
 
-        if (winText != null)
-        {
-            winText.enabled = true;
-            if (_winZoomRoutine != null) StopCoroutine(_winZoomRoutine);
-            _winZoomRoutine = StartCoroutine(WinZoomIn());
-        }
+        if (victorySource != null && victorySource.clip != null)
+            victorySource.PlayOneShot(victorySource.clip);
 
         if (_nextLaneRoutine != null) StopCoroutine(_nextLaneRoutine);
         _nextLaneRoutine = StartCoroutine(GoNextLaneAfterDelay(strikeToNextLaneDelay));
@@ -200,7 +301,10 @@ public class GameManager : MonoBehaviour
         int next = _currentLaneIndex + 1;
         if (next >= lanes.Count)
         {
-            ReloadScene();
+            LastScore = _pinsKnockedOverall;
+            float r = Mathf.Max(0f, finalLaneReturnDelay);
+            if (r > 0f) yield return new WaitForSeconds(r);
+            SceneManager.LoadScene(mainSceneName);
             yield break;
         }
 
@@ -252,47 +356,23 @@ public class GameManager : MonoBehaviour
         }
         else
         {
-            //RestartCurrentLane();
             if (_currentLaneIndex == lanes.Count - 1)
-                ReloadScene();
+            {
+                LastScore = _pinsKnockedOverall;
+                SceneManager.LoadScene(mainSceneName);
+            }
             else
                 SetLane(_currentLaneIndex + 1, true);
         }
     }
 
-    private void RestartCurrentLane()
-    {
-        StopLaneTimer();
-
-        _strike = false;
-        _cachedStrike = false;
-
-        if (_nextLaneRoutine != null) { StopCoroutine(_nextLaneRoutine); _nextLaneRoutine = null; }
-
-        SetLane(_currentLaneIndex, true);
-
-        if (_startWinCheck)
-            StartLaneTimer();
-    }
     void HideTutorialAnim()
     {
-        handImage.SetActive(false);
+        if (handImage != null)
+            handImage.SetActive(false);
     }
 
-    public bool KnockedCheck()
-    {
-        if (_activePins == null || _activePins.Count == 0)
-            return false;
-
-        return _activePins.TrueForAll(pin => pin != null && pin.isKnocked);
-    }
-
-    public void AddKnock()
-    {
-        _pinsKnockedThisLane++;
-    }
-
-    private IEnumerator WinZoomIn()
+    private IEnumerator PopZoom()
     {
         var rt = winText.rectTransform;
         float d = Mathf.Max(0.0001f, winZoomDuration);
@@ -325,7 +405,7 @@ public class GameManager : MonoBehaviour
         }
 
         rt.localScale = Vector3.one;
-        _winZoomRoutine = null;
+        _popRoutine = null;
     }
 
     public void ReloadScene()

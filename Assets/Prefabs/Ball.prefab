@@ -111,19 +111,15 @@ MonoBehaviour:
   maxSamples: 128
   pixelsToWorld: 0.0025
   invertForward: 0
-  drawWorldPath: 0
-  worldPathLine: {fileID: 0}
-  worldFitLine: {fileID: 0}
-  worldLineUpOffset: 0.02
   speedScale: 1
   minSpeed: 15
   maxSpeed: 25
   faceTarget: {fileID: 0}
   maxSpinAroundVelocityRad: 100
-  curveMaxBendAngleDeg: 35
-  curveDeadzone: 0.1
-  curveExponent: 3
-  useSignedCurve: 1
+  bendMaxDeg: 35
+  bendDeadzone: 0.05
+  bendExponent: 5
+  useSignedBend: 1
   debugLogs: 0
   camMove: {fileID: 0}
   source: {fileID: 2371606316963584039}
@@ -293,6 +289,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 2ec4f8ebd3c5c4546b5353d1e3f7f5e4, type: 3}
       insertIndex: -1
       addedObject: {fileID: 2998704239553768329}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 2ec4f8ebd3c5c4546b5353d1e3f7f5e4, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 4042293400893199917}
   m_SourcePrefab: {fileID: 100100000, guid: 2ec4f8ebd3c5c4546b5353d1e3f7f5e4, type: 3}
 --- !u!1 &8344713455057525205 stripped
 GameObject:
@@ -396,6 +395,20 @@ AudioSource:
     m_PreInfinity: 2
     m_PostInfinity: 2
     m_RotationOrder: 4
+--- !u!114 &4042293400893199917
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 8344713455057525205}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6600cfbac8f21144caeba707fa9a4025, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BallVisualSpinScaler
+  sourceRb: {fileID: 5717027593975456775}
+  spinScale: 0.25
 --- !u!4 &8684540971633869679 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: 2ec4f8ebd3c5c4546b5353d1e3f7f5e4, type: 3}
