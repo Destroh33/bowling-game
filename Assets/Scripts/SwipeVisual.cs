@@ -86,8 +86,6 @@ public class SwipeVisual : MonoBehaviour
         }
 
         DrawPolyline(samples, alpha);
-
-        // Once fully faded, hide
         if (_fading && alpha <= 0.0001f)
         {
             _activeSegments = 0;
