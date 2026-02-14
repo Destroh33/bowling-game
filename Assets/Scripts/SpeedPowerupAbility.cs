@@ -15,6 +15,7 @@ public class SpeedPowerupAbility : PowerupAbilityBase
     }
     public override void Activate(GameObject player)
     {
-        player.GetComponent<Rigidbody>().linearVelocity *= 1.5f;  
+        player.GetComponent<Rigidbody>().linearVelocity *= 1.5f;
+        base.Activate(player);
     }
 }

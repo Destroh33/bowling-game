@@ -55,9 +55,9 @@ public class BowlingSwipeController : MonoBehaviour
     InputAction pressAction;
     InputAction positionAction;
 
-    struct Sample { public Vector2 p; public float t; public Sample(Vector2 p, float t) { this.p = p; this.t = t; } }
+    public struct Sample { public Vector2 p; public float t; public Sample(Vector2 p, float t) { this.p = p; this.t = t; } }
 
-    readonly List<Sample> samples = new(256);
+    public readonly List<Sample> samples = new(256);
 
     bool dragging;
     float swipeStartTime;

@@ -139,6 +139,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b80f6e31b1ecd6a4dbe79687a313f7c2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FrictionPowerupAbility
+  activateSound: {fileID: 8300000, guid: 84136b48f91bef54d88ce9bf69f8238a, type: 3}
   lane: {fileID: 0}
   stickyMat: {fileID: 13400000, guid: b7190284e091386479dcd735b05959fc, type: 2}
 --- !u!1 &7126112440610766070

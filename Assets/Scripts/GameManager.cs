@@ -408,7 +408,11 @@ public class GameManager : MonoBehaviour
         rt.localScale = Vector3.one;
         _popRoutine = null;
     }
-
+    public void PlaySound(AudioClip clip)
+    {
+        if (pointSource != null && clip != null)
+            pointSource.PlayOneShot(clip);
+    }
     public void ReloadScene()
     {
         SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);

@@ -107,8 +107,11 @@ MonoBehaviour:
     serializedVersion: 2
     m_Bits: 0
   laneY: 0
-  maxRecordSeconds: 0.35
-  maxSamples: 128
+  maxRecordSeconds: 1
+  sampleInterval: 0.01
+  maxSamples: 100
+  refWidth: 666
+  refHeight: 441
   pixelsToWorld: 0.0025
   invertForward: 0
   speedScale: 1
