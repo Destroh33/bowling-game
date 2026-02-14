@@ -17,6 +17,7 @@ public class ScalePowerupAbility : PowerupAbilityBase
     {
         player.transform.localScale *= 1.5f;
         player.GetComponent<Rigidbody>().mass *= 5f;  
+        base.Activate(player);
         Debug.Log("Scale Powerup Activated: Player size increased!");
     }
 }

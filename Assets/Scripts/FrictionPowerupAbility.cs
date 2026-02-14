@@ -18,5 +18,6 @@ public class FrictionPowerupAbility : PowerupAbilityBase
     public override void Activate(GameObject player)
     {
         lane.GetComponent<Collider>().material = stickyMat;
+        base.Activate(player);
     }
 }

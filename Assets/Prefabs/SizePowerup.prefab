@@ -229,3 +229,4 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ba78fd9367ce5084caa5a726ec180cbb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ScalePowerupAbility
+  activateSound: {fileID: 8300000, guid: a2c216d34b66b9540a6432d6221caa2b, type: 3}

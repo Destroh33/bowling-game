@@ -229,3 +229,4 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 4eb32d731c700194083f5c11df28e262, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::SpeedPowerupAbility
+  activateSound: {fileID: 8300000, guid: 893d337447fd338419391fcc20a73cd6, type: 3}
